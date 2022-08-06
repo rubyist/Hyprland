@@ -624,6 +624,9 @@ void CCompositor::focusWindow(CWindow* pWindow, wlr_surface* pSurface) {
     if (m_pLastWindow == pWindow && m_sSeat.seat->keyboard_state.focused_surface == pSurface)
         return;
 
+    if (!isWorkspaceVisible(pWindow->m_iWorkspaceID))
+        g_pKeybindManager->changeworkspace("[internal]" + std::to_string(pWindow->m_iWorkspaceID));
+
     const auto PLASTWINDOW = m_pLastWindow;
     m_pLastWindow = pWindow;
 
@@ -1349,6 +1352,8 @@ void CCompositor::moveWorkspaceToMonitor(CWorkspace* pWorkspace, CMonitor* pMoni
             if (w->m_bIsFloating && w->m_bIsMapped && !w->m_bHidden) {
                 w->m_vRealPosition = w->m_vRealPosition.vec() - POLDMON->vecPosition + pMonitor->vecPosition;
             }
+
+            w->updateToplevel();
         }
     }
 
@@ -1540,4 +1545,17 @@ SLayerSurface* CCompositor::getLayerSurfaceFromWlr(wlr_layer_surface_v1* pLS) {
     }
 
     return nullptr;
+}
+
+void CCompositor::closeWindow(CWindow* pWindow) {
+    if (pWindow && windowValidMapped(pWindow)) {
+        g_pXWaylandManager->sendCloseWindow(pWindow);
+
+        if (pWindow == m_pLastWindow) {
+            m_pLastFocus = nullptr;
+            m_pLastWindow = nullptr;
+            g_pEventManager->postEvent(SHyprIPCEvent{"activewindow", ","}); // post an activewindow event to empty, as we are currently unfocused
+            focusWindow(windowFromCursor());
+        }
+    }
 }
