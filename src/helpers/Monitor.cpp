@@ -137,32 +137,36 @@ void CMonitor::onDisconnect() {
         }
     }
 
-    if (!BACKUPMON) {
-        Debug::log(CRIT, "No monitors! Unplugged last! Exiting.");
-        g_pCompositor->cleanup();
-        return;
-    }
+    // let's don't shut down
+    // if (!BACKUPMON) {
+    //     Debug::log(CRIT, "No monitors! Unplugged last! Exiting.");
+    //     g_pCompositor->cleanup();
+    //     return;
+    // }
 
     m_bEnabled = false;
 
     hyprListener_monitorFrame.removeCallback();
 
-    const auto BACKUPWORKSPACE = BACKUPMON->activeWorkspace > 0 ? std::to_string(BACKUPMON->activeWorkspace) : "name:" + g_pCompositor->getWorkspaceByID(BACKUPMON->activeWorkspace)->m_szName;
+    if (BACKUPMON) {
+        // not the last monitor
+        const auto BACKUPWORKSPACE = BACKUPMON->activeWorkspace > 0 ? std::to_string(BACKUPMON->activeWorkspace) : "name:" + g_pCompositor->getWorkspaceByID(BACKUPMON->activeWorkspace)->m_szName;
 
-    // snap cursor
-    wlr_cursor_warp(g_pCompositor->m_sWLRCursor, g_pCompositor->m_sSeat.mouse->mouse, BACKUPMON->vecPosition.x + BACKUPMON->vecTransformedSize.x / 2.f, BACKUPMON->vecPosition.y + BACKUPMON->vecTransformedSize.y / 2.f);
+        // snap cursor
+        wlr_cursor_warp(g_pCompositor->m_sWLRCursor, g_pCompositor->m_sSeat.mouse->mouse, BACKUPMON->vecPosition.x + BACKUPMON->vecTransformedSize.x / 2.f, BACKUPMON->vecPosition.y + BACKUPMON->vecTransformedSize.y / 2.f);
 
-    // move workspaces
-    std::deque<CWorkspace*> wspToMove;
-    for (auto& w : g_pCompositor->m_vWorkspaces) {
-        if (w->m_iMonitorID == ID) {
-            wspToMove.push_back(w.get());
+        // move workspaces
+        std::deque<CWorkspace*> wspToMove;
+        for (auto& w : g_pCompositor->m_vWorkspaces) {
+            if (w->m_iMonitorID == ID) {
+                wspToMove.push_back(w.get());
+            }
         }
-    }
 
-    for (auto& w : wspToMove) {
-        g_pCompositor->moveWorkspaceToMonitor(w, BACKUPMON);
-        w->startAnim(true, true, true);
+        for (auto& w : wspToMove) {
+            g_pCompositor->moveWorkspaceToMonitor(w, BACKUPMON);
+            w->startAnim(true, true, true);
+        }
     }
 
     activeWorkspace = -1;
@@ -173,17 +177,22 @@ void CMonitor::onDisconnect() {
 
     wlr_output_enable(output, false);
 
+    wlr_output_enable(output, 0);
     wlr_output_commit(output);
 
     for (auto& lsl : m_aLayerSurfaceLists) {
         lsl.clear();
     }
 
-    g_pCompositor->m_vWorkspaces.erase(std::remove_if(g_pCompositor->m_vWorkspaces.begin(), g_pCompositor->m_vWorkspaces.end(), [&](std::unique_ptr<CWorkspace>& el) { return el->m_iMonitorID == ID; }));
+    // TODO this is supposed to remove all the workspaces for the monitor, but for some reason it doesn't?
+    // cheap hack just removes all because I only have one monitor until I fix this
+    // g_pCompositor->m_vWorkspaces.erase(std::remove_if(g_pCompositor->m_vWorkspaces.begin(), g_pCompositor->m_vWorkspaces.end(), [&](std::unique_ptr<CWorkspace>& el) { return el->m_iMonitorID == ID; }));
+    g_pCompositor->m_vWorkspaces.erase(g_pCompositor->m_vWorkspaces.begin(), g_pCompositor->m_vWorkspaces.end());
 
     Debug::log(LOG, "Removed monitor %s!", szName.c_str());
 
     g_pEventManager->postEvent(SHyprIPCEvent{"monitorremoved", szName});
 
     g_pCompositor->m_vMonitors.erase(std::remove_if(g_pCompositor->m_vMonitors.begin(), g_pCompositor->m_vMonitors.end(), [&](std::shared_ptr<CMonitor>& el) { return el.get() == this; }));
+    g_pCompositor->m_pLastWindow = nullptr; // TODO I don't remember if this is necessary, check it
 }

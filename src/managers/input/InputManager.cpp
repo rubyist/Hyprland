@@ -56,6 +56,8 @@ void CInputManager::mouseMoveUnified(uint32_t time, bool refocus) {
     m_vLastCursorPosFloored = MOUSECOORDSFLOORED;
 
     const auto PMONITOR = g_pCompositor->getMonitorFromCursor();
+    if (!PMONITOR->m_bEnabled)
+        return;
 
     bool didConstraintOnCursor = false;
 

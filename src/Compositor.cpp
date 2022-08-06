@@ -1436,7 +1436,7 @@ void CCompositor::updateWorkspaceWindowDecos(const int& id) {
 }
 
 void CCompositor::scheduleFrameForMonitor(CMonitor* pMonitor) {
-    if ((m_sWLRSession && !m_sWLRSession->active) || !m_bSessionActive)
+    if ((m_sWLRSession && !m_sWLRSession->active) || !m_bSessionActive || !pMonitor->m_bEnabled)
         return;
 
     wlr_output_schedule_frame(pMonitor->output);
