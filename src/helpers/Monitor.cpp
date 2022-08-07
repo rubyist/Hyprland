@@ -184,10 +184,10 @@ void CMonitor::onDisconnect() {
         lsl.clear();
     }
 
-    // TODO this is supposed to remove all the workspaces for the monitor, but for some reason it doesn't?
-    // cheap hack just removes all because I only have one monitor until I fix this
-    // g_pCompositor->m_vWorkspaces.erase(std::remove_if(g_pCompositor->m_vWorkspaces.begin(), g_pCompositor->m_vWorkspaces.end(), [&](std::unique_ptr<CWorkspace>& el) { return el->m_iMonitorID == ID; }));
-    g_pCompositor->m_vWorkspaces.erase(g_pCompositor->m_vWorkspaces.begin(), g_pCompositor->m_vWorkspaces.end());
+    if (BACKUPMON)
+        g_pCompositor->m_vWorkspaces.erase(g_pCompositor->m_vWorkspaces.begin(), g_pCompositor->m_vWorkspaces.end());
+    else
+        g_pCompositor->m_vWorkspaces.erase(std::remove_if(g_pCompositor->m_vWorkspaces.begin(), g_pCompositor->m_vWorkspaces.end(), [&](std::unique_ptr<CWorkspace>& el) { return el->m_iMonitorID == ID; }), g_pCompositor->m_vWorkspaces.end());
 
     Debug::log(LOG, "Removed monitor %s!", szName.c_str());
 
