@@ -137,16 +137,10 @@ void CMonitor::onDisconnect() {
         }
     }
 
-    // let's don't shut down
-    // if (!BACKUPMON) {
-    //     Debug::log(CRIT, "No monitors! Unplugged last! Exiting.");
-    //     g_pCompositor->cleanup();
-    //     return;
-    // }
-
     m_bEnabled = false;
 
     hyprListener_monitorFrame.removeCallback();
+    hyprListener_monitorDestroy.removeCallback();
 
     if (BACKUPMON) {
         // not the last monitor
@@ -185,14 +179,11 @@ void CMonitor::onDisconnect() {
     }
 
     if (BACKUPMON)
-        g_pCompositor->m_vWorkspaces.erase(g_pCompositor->m_vWorkspaces.begin(), g_pCompositor->m_vWorkspaces.end());
-    else
-        g_pCompositor->m_vWorkspaces.erase(std::remove_if(g_pCompositor->m_vWorkspaces.begin(), g_pCompositor->m_vWorkspaces.end(), [&](std::unique_ptr<CWorkspace>& el) { return el->m_iMonitorID == ID; }), g_pCompositor->m_vWorkspaces.end());
+        g_pCompositor->m_vWorkspaces.erase(std::remove_if(g_pCompositor->m_vWorkspaces.begin(), g_pCompositor->m_vWorkspaces.end(), [&](std::unique_ptr<CWorkspace>& el) { return el->m_iMonitorID == ID; }));
 
     Debug::log(LOG, "Removed monitor %s!", szName.c_str());
 
     g_pEventManager->postEvent(SHyprIPCEvent{"monitorremoved", szName});
 
     g_pCompositor->m_vMonitors.erase(std::remove_if(g_pCompositor->m_vMonitors.begin(), g_pCompositor->m_vMonitors.end(), [&](std::shared_ptr<CMonitor>& el) { return el.get() == this; }));
-    g_pCompositor->m_pLastWindow = nullptr; // TODO I don't remember if this is necessary, check it
 }
