@@ -615,7 +615,19 @@ void CCompositor::focusWindow(CWindow* pWindow, wlr_surface* pSurface) {
     }
 
     if (!pWindow || !windowValidMapped(pWindow)) {
+        const auto PLASTWINDOW = m_pLastWindow;
+        m_pLastWindow = nullptr;
+
+        if (windowValidMapped(PLASTWINDOW)) {
+            updateWindowAnimatedDecorationValues(PLASTWINDOW);
+
+            if (PLASTWINDOW->m_phForeignToplevel)
+                wlr_foreign_toplevel_handle_v1_set_activated(PLASTWINDOW->m_phForeignToplevel, false);
+        }
+
         wlr_seat_keyboard_notify_clear_focus(m_sSeat.seat);
+
+        m_pLastFocus = nullptr;
         return;
     }
 

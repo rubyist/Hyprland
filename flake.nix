@@ -17,6 +17,7 @@
     inherit (nixpkgs) lib;
     genSystems = lib.genAttrs [
       # Add more systems if they are supported
+      "aarch64-linux"
       "x86_64-linux"
     ];
     pkgsFor = nixpkgs.legacyPackages;
@@ -33,7 +34,7 @@
       });
       hyprland = prev.callPackage ./nix/default.nix {
         stdenv = prev.gcc12Stdenv;
-        version = "0.9.1beta" + "+date=" + (mkDate (self.lastModifiedDate or "19700101"));
+        version = "0.10.0beta" + "+date=" + (mkDate (self.lastModifiedDate or "19700101"));
         wlroots = wlroots-hyprland;
       };
       hyprland-debug = hyprland.override {debug = true;};
