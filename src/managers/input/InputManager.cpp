@@ -31,6 +31,7 @@ void CInputManager::mouseMoveUnified(uint32_t time, bool refocus) {
     static auto *const PFOLLOWMOUSE = &g_pConfigManager->getConfigValuePtr("input:follow_mouse")->intValue;
     static auto *const PMOUSEDPMS = &g_pConfigManager->getConfigValuePtr("misc:mouse_move_enables_dpms")->intValue;
     static auto *const PFOLLOWONDND = &g_pConfigManager->getConfigValuePtr("misc:always_follow_on_dnd")->intValue;
+    static auto *const PHOGFOCUS = &g_pConfigManager->getConfigValuePtr("misc:layers_hog_keyboard_focus")->intValue;
 
     if (!g_pCompositor->m_bReadyToProcess)
         return;
@@ -70,7 +71,7 @@ void CInputManager::mouseMoveUnified(uint32_t time, bool refocus) {
         const auto CONSTRAINTWINDOW = g_pCompositor->getConstraintWindow(g_pCompositor->m_sSeat.mouse);
 
         if (!CONSTRAINTWINDOW) {
-            g_pCompositor->m_sSeat.mouse->currentConstraint = nullptr;
+            unconstrainMouse();
         } else {
             // Native Wayland apps know how 2 constrain themselves.
             // XWayland, we just have to accept them. Might cause issues, but thats XWayland for ya.
@@ -231,11 +232,21 @@ void CInputManager::mouseMoveUnified(uint32_t time, bool refocus) {
         surfaceLocal = mouseCoords - surfacePos + Vector2D(geom.x, geom.y);
     }
 
+    bool allowKeyboardRefocus = true;
+
+    if (*PHOGFOCUS && !refocus && g_pCompositor->m_pLastFocus) {
+        const auto PLS = g_pCompositor->getLayerSurfaceFromSurface(g_pCompositor->m_pLastFocus);
+
+        if (PLS && PLS->layerSurface->current.keyboard_interactive) {
+            allowKeyboardRefocus = false;
+        }
+    }
+
     if (pFoundWindow) {
         if (*PFOLLOWMOUSE != 1 && !refocus) {
             if (pFoundWindow != g_pCompositor->m_pLastWindow && g_pCompositor->windowValidMapped(g_pCompositor->m_pLastWindow) && (g_pCompositor->m_pLastWindow->m_bIsFloating != pFoundWindow->m_bIsFloating)) {
                 // enter if change floating style
-                if (*PFOLLOWMOUSE != 3)
+                if (*PFOLLOWMOUSE != 3 && allowKeyboardRefocus)
                     g_pCompositor->focusWindow(pFoundWindow, foundSurface);
                 wlr_seat_pointer_notify_enter(g_pCompositor->m_sSeat.seat, foundSurface, surfaceLocal.x, surfaceLocal.y);
             } else if (*PFOLLOWMOUSE == 2) {
@@ -254,11 +265,13 @@ void CInputManager::mouseMoveUnified(uint32_t time, bool refocus) {
             wlr_seat_pointer_notify_motion(g_pCompositor->m_sSeat.seat, time, surfaceLocal.x, surfaceLocal.y);
             return;  // don't enter any new surfaces
         } else {
-            if (*PFOLLOWMOUSE != 3)
+            if (*PFOLLOWMOUSE != 3 && allowKeyboardRefocus)
                 g_pCompositor->focusWindow(pFoundWindow, foundSurface);
         }
-    } else if (pFoundLayerSurface && pFoundLayerSurface->layerSurface->current.keyboard_interactive && *PFOLLOWMOUSE != 3)
-        g_pCompositor->focusSurface(foundSurface);
+    } else {
+        if (pFoundLayerSurface && pFoundLayerSurface->layerSurface->current.keyboard_interactive && *PFOLLOWMOUSE != 3 && allowKeyboardRefocus)
+            g_pCompositor->focusSurface(foundSurface);
+    }
 
     wlr_seat_pointer_notify_enter(g_pCompositor->m_sSeat.seat, foundSurface, surfaceLocal.x, surfaceLocal.y);
     wlr_seat_pointer_notify_motion(g_pCompositor->m_sSeat.seat, time, surfaceLocal.x, surfaceLocal.y);
@@ -317,7 +330,7 @@ void CInputManager::setClickMode(eClickBehaviorMode mode) {
             m_ecbClickBehavior = CLICKMODE_KILL;
 
             // remove constraints
-            g_pCompositor->m_sSeat.mouse->constraintActive = false;
+            g_pInputManager->unconstrainMouse();
             refocus();
 
             // set cursor
@@ -538,6 +551,8 @@ void CInputManager::applyConfigToKeyboard(SKeyboard* pKeyboard) {
     auto KEYMAP = xkb_keymap_new_from_names(CONTEXT, &rules, XKB_KEYMAP_COMPILE_NO_FLAGS);
 
     if (!KEYMAP) {
+        g_pConfigManager->addParseError("Invalid keyboard layout passed. ( rules: " + RULES + ", model: " + MODEL + ", variant: " + VARIANT + ", options: " + OPTIONS + ", layout: " + LAYOUT + " )");
+
         Debug::log(ERR, "Keyboard layout %s with variant %s (rules: %s, model: %s, options: %s) couldn't have been loaded.", rules.layout, rules.variant, rules.rules, rules.model, rules.options);
         memset(&rules, 0, sizeof(rules));
 
@@ -690,7 +705,7 @@ void CInputManager::destroyMouse(wlr_input_device* mouse) {
     g_pCompositor->m_sSeat.mouse = m_lMice.size() > 0 ? &m_lMice.front() : nullptr;
 
     if (g_pCompositor->m_sSeat.mouse)
-        g_pCompositor->m_sSeat.mouse->currentConstraint = nullptr;
+        unconstrainMouse();
 }
 
 void CInputManager::onKeyboardKey(wlr_keyboard_key_event* e, SKeyboard* pKeyboard) {
@@ -815,6 +830,29 @@ void CInputManager::constrainMouse(SMouse* pMouse, wlr_pointer_constraint_v1* co
     pMouse->hyprListener_commitConstraint.initCallback(&pMouse->currentConstraint->surface->events.commit, &Events::listener_commitConstraint, pMouse, "Mouse constraint commit");
 
     Debug::log(LOG, "Constrained mouse to %x", pMouse->currentConstraint);
+}
+
+void CInputManager::unconstrainMouse() {
+    if (!g_pCompositor->m_sSeat.mouse->currentConstraint)
+        return;
+
+    const auto CONSTRAINTWINDOW = g_pCompositor->getConstraintWindow(g_pCompositor->m_sSeat.mouse);
+
+    if (CONSTRAINTWINDOW) {
+        if (CONSTRAINTWINDOW->m_bIsX11) {
+            wlr_xwayland_surface_activate(CONSTRAINTWINDOW->m_uSurface.xwayland, false);
+        } else {
+            wlr_xdg_toplevel_set_activated(CONSTRAINTWINDOW->m_uSurface.xdg->toplevel, false);
+        }
+    }
+
+    wlr_pointer_constraint_v1_send_deactivated(g_pCompositor->m_sSeat.mouse->currentConstraint);
+    g_pCompositor->m_sSeat.mouse->constraintActive = false;
+
+    // TODO: its better to somehow detect the workspace...
+    g_pCompositor->m_sSeat.mouse->currentConstraint = nullptr;
+
+    g_pCompositor->m_sSeat.mouse->hyprListener_commitConstraint.removeCallback();
 }
 
 void Events::listener_commitConstraint(void* owner, void* data) {

@@ -6,6 +6,8 @@ void CMonitor::onConnect(bool noRule) {
     if (m_bEnabled)
         return;
 
+    szName = output->name;
+
     // get monitor rule that matches
     SMonitorRule monitorRule = g_pConfigManager->getMonitorRuleFor(output->name);
 
@@ -14,11 +16,49 @@ void CMonitor::onConnect(bool noRule) {
 
     // if it's disabled, disable and ignore
     if (monitorRule.disabled) {
+
+        wlr_output_enable_adaptive_sync(output, 1);
+        wlr_output_set_scale(output, 1);
+        wlr_output_set_transform(output, WL_OUTPUT_TRANSFORM_NORMAL);
+
+        auto PREFSTATE = wlr_output_preferred_mode(output);
+
+        if (!PREFSTATE) {
+            wlr_output_mode* mode;
+
+            wl_list_for_each(mode, &output->modes, link) {
+                wlr_output_set_mode(output, PREFSTATE);
+
+                if (!wlr_output_test(output))
+                    continue;
+                
+                PREFSTATE = mode;
+                break;
+            }
+        }
+
+        if (PREFSTATE)
+            wlr_output_set_mode(output, PREFSTATE);
+        else
+            Debug::log(WARN, "No mode found for disabled output %s", output->name);
+
         wlr_output_enable(output, 0);
-        wlr_output_commit(output);
+        
+        if (!wlr_output_commit(output)) {
+            Debug::log(ERR, "Couldn't commit disabled state on output %s", output->name);
+        }
+
+        Events::listener_change(nullptr, nullptr);
+
+        m_bEnabled = false;
 
         hyprListener_monitorFrame.removeCallback();
         return;
+    }
+
+    if (!m_bRenderingInitPassed) {
+        wlr_output_init_render(output, g_pCompositor->m_sWLRAllocator, g_pCompositor->m_sWLRRenderer);
+        m_bRenderingInitPassed = true;
     }
 
     if (!m_pThisWrap) {
@@ -37,8 +77,6 @@ void CMonitor::onConnect(bool noRule) {
     }
     
     m_bEnabled = true;
-
-    szName = output->name;
 
     wlr_output_set_scale(output, monitorRule.scale);
     wlr_xcursor_manager_load(g_pCompositor->m_sWLRXCursorMgr, monitorRule.scale);
@@ -61,7 +99,7 @@ void CMonitor::onConnect(bool noRule) {
     if (!noRule)
         g_pHyprRenderer->applyMonitorRule(this, &monitorRule, true);
 
-    Debug::log(LOG, "Added new monitor with name %s at %i,%i with size %ix%i, pointer %x", output->name, (int)monitorRule.offset.x, (int)monitorRule.offset.y, (int)monitorRule.resolution.x, (int)monitorRule.resolution.y, output);
+    Debug::log(LOG, "Added new monitor with name %s at %i,%i with size %ix%i, pointer %x", output->name, (int)vecPosition.x, (int)vecPosition.y, (int)vecPixelSize.x, (int)vecPixelSize.y, output);
 
     damage = wlr_output_damage_create(output);
 

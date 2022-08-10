@@ -55,6 +55,7 @@ void CConfigManager::setDefaultVars() {
     configValues["misc:damage_entire_on_snapshot"].intValue = 0;
     configValues["misc:mouse_move_enables_dpms"].intValue = 0;
     configValues["misc:always_follow_on_dnd"].intValue = 1;
+    configValues["misc:layers_hog_keyboard_focus"].intValue = 0;
 
     configValues["debug:int"].intValue = 0;
     configValues["debug:log_damage"].intValue = 0;
@@ -512,13 +513,24 @@ void CConfigManager::handleBezier(const std::string& command, const std::string&
     std::string bezierName = curitem;
 
     nextItem();
+    if (curitem == "")
+        parseError = "too few arguments";
     float p1x = std::stof(curitem);
     nextItem();
+    if (curitem == "")
+        parseError = "too few arguments";
     float p1y = std::stof(curitem);
     nextItem();
+    if (curitem == "")
+        parseError = "too few arguments";
     float p2x = std::stof(curitem);
     nextItem();
+    if (curitem == "")
+        parseError = "too few arguments";
     float p2y = std::stof(curitem);
+    nextItem();
+    if (curitem != "")
+        parseError = "too many arguments";
 
     g_pAnimationManager->addBezierWithName(bezierName, Vector2D(p1x, p1y), Vector2D(p2x, p2y));
 }
@@ -1348,4 +1360,9 @@ void CConfigManager::ensureDPMS() {
 
 SAnimationPropertyConfig* CConfigManager::getAnimationPropertyConfig(const std::string& name) {
     return &animationConfig[name];
+}
+
+void CConfigManager::addParseError(const std::string& err) {
+    if (parseError == "")
+        parseError = err;
 }
